@@ -8,6 +8,7 @@ import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from collections.abc import AsyncGenerator
 
 from app.core.settings import Settings, get_settings
 from app.db.deps import get_db_session
@@ -58,7 +59,7 @@ def test_database_url() -> str:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def db_engine(test_database_url: str) -> AsyncEngine:
+async def db_engine(test_database_url: str) -> AsyncGenerator[AsyncEngine, None]:
     engine = create_engine(test_database_url, echo=False)
     try:
         yield engine
@@ -125,6 +126,6 @@ async def client(app):
 
 
 @pytest_asyncio.fixture
-async def db_session(db_sessionmaker: async_sessionmaker[AsyncSession]) -> AsyncSession:
+async def db_session(db_sessionmaker: async_sessionmaker[AsyncSession]) -> AsyncGenerator[AsyncSession, None]:
     async with db_sessionmaker() as session:
         yield session
