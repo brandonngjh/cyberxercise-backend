@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.settings import get_settings
 from app.db.deps import get_engine
+from app.ws.router import router as ws_router
 
 
 @asynccontextmanager
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(api_router)
+    app.include_router(ws_router)
     return app
 
 

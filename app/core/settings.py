@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Dev-only convenience. Do not enable in production.
     allow_instructor_register: bool = False
 
+    # Pepper used for HMAC hashing participant tokens.
+    participant_token_pepper: str
+
 
 @lru_cache
 def get_settings() -> Settings:

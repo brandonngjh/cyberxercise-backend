@@ -106,6 +106,7 @@ def app(test_database_url: str, db_sessionmaker: async_sessionmaker[AsyncSession
             database_url=test_database_url,
             jwt_secret="test-jwt-secret",
             allow_instructor_register=False,
+            participant_token_pepper="test-pepper",
         )
 
     async def override_db_session():
