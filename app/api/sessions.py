@@ -13,6 +13,7 @@ from app.api.deps import get_current_instructor
 from app.db.deps import get_db_session
 from app.db.models.exercise_session import ExerciseSession, SessionEndedBy, SessionStatus
 from app.db.models.instructor import Instructor
+from app.db.models.message import Message
 from app.db.models.participant import Participant
 from app.services.team_id import generate_team_id
 from app.ws.deps import get_ws_manager
@@ -59,6 +60,18 @@ class ParticipantResponse(BaseModel):
 class ParticipantsListResponse(BaseModel):
     session_id: uuid.UUID
     participants: list[ParticipantResponse]
+
+
+class MessageResponse(BaseModel):
+    id: uuid.UUID
+    participant_id: uuid.UUID
+    content: str
+    created_at: datetime
+
+
+class MessagesListResponse(BaseModel):
+    session_id: uuid.UUID
+    messages: list[MessageResponse]
 
 
 @router.post("", response_model=SessionCreatedResponse, status_code=status.HTTP_201_CREATED)
@@ -223,7 +236,7 @@ async def start_session(
         data={
             "session": {
                 "id": str(session.id),
-                "status": session.status,
+                "status": session.status.value,
                 "started_at": session.started_at.isoformat() if session.started_at else None,
             }
         },
@@ -274,9 +287,9 @@ async def end_session(
         data={
             "session": {
                 "id": str(session.id),
-                "status": session.status,
+                "status": session.status.value,
                 "ended_at": session.ended_at.isoformat() if session.ended_at else None,
-                "ended_by": session.ended_by,
+                "ended_by": session.ended_by.value if session.ended_by else None,
             }
         },
     )
@@ -292,4 +305,40 @@ async def end_session(
         ended_at=session.ended_at,
         ended_by=session.ended_by,
         created_at=session.created_at,
+    )
+
+
+@router.get("/{session_id}/messages", response_model=MessagesListResponse)
+async def list_session_messages(
+    session_id: uuid.UUID,
+    instructor: Instructor = Depends(get_current_instructor),
+    db: AsyncSession = Depends(get_db_session),
+) -> MessagesListResponse:
+    session_result = await db.execute(
+        select(ExerciseSession)
+        .where(ExerciseSession.id == session_id)
+        .where(ExerciseSession.instructor_id == instructor.id)
+    )
+    session = session_result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+    messages_result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session.id)
+        .order_by(Message.created_at.asc())
+    )
+    messages = messages_result.scalars().all()
+
+    return MessagesListResponse(
+        session_id=session.id,
+        messages=[
+            MessageResponse(
+                id=m.id,
+                participant_id=m.participant_id,
+                content=m.content,
+                created_at=m.created_at,
+            )
+            for m in messages
+        ],
     )
