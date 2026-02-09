@@ -107,5 +107,6 @@ async def test_submit_message_persists_broadcasts_and_lists(client, db_session, 
     assert len(listed["messages"]) == 1
     assert listed["messages"][0]["id"] == body["message_id"]
     assert listed["messages"][0]["participant_id"] == joined["participant_id"]
+    assert listed["messages"][0]["display_name"] == "Alice"
     assert listed["messages"][0]["content"] == "hello world"
     assert listed["messages"][0]["created_at"]

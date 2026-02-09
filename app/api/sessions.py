@@ -65,6 +65,7 @@ class ParticipantsListResponse(BaseModel):
 class MessageResponse(BaseModel):
     id: uuid.UUID
     participant_id: uuid.UUID
+    display_name: str
     content: str
     created_at: datetime
 
@@ -324,11 +325,12 @@ async def list_session_messages(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     messages_result = await db.execute(
-        select(Message)
+        select(Message, Participant.display_name)
+        .join(Participant, Participant.id == Message.participant_id)
         .where(Message.session_id == session.id)
         .order_by(Message.created_at.asc())
     )
-    messages = messages_result.scalars().all()
+    rows = messages_result.all()
 
     return MessagesListResponse(
         session_id=session.id,
@@ -336,9 +338,10 @@ async def list_session_messages(
             MessageResponse(
                 id=m.id,
                 participant_id=m.participant_id,
+                display_name=display_name,
                 content=m.content,
                 created_at=m.created_at,
             )
-            for m in messages
+            for (m, display_name) in rows
         ],
     )
