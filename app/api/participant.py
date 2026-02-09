@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
@@ -148,3 +149,38 @@ async def submit_message(
         participant_id=participant.id,
         content=message.content,
     )
+
+
+class LeaveResponse(BaseModel):
+    participant_id: uuid.UUID
+    session_id: uuid.UUID
+    left_at: datetime
+
+
+@router.post("/leave", response_model=LeaveResponse)
+async def leave_session(
+    current: tuple[ExerciseSession, Participant] = Depends(get_current_participant),
+    db: AsyncSession = Depends(get_db_session),
+    ws: WsManager = Depends(get_ws_manager),
+) -> LeaveResponse:
+    session, participant = current
+
+    now = datetime.now(timezone.utc)
+    participant.left_at = now
+    participant.token_revoked_at = now
+    participant.is_ready = False
+    await db.commit()
+
+    await ws.broadcast(
+        session_id=session.id,
+        event_type="participant_left",
+        data={
+            "participant": {
+                "id": str(participant.id),
+                "display_name": participant.display_name,
+                "left_at": now.isoformat(),
+            }
+        },
+    )
+
+    return LeaveResponse(participant_id=participant.id, session_id=session.id, left_at=now)

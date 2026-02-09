@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
@@ -111,6 +112,7 @@ async def ws_participant(
         .where(Participant.session_id == session.id)
         .where(Participant.token_hash == token_hash)
         .where(Participant.token_revoked_at.is_(None))
+        .where(Participant.left_at.is_(None))
     )
     participant = participant_result.scalar_one_or_none()
     if participant is None:
@@ -123,3 +125,35 @@ async def ws_participant(
             await websocket.receive_text()
     except WebSocketDisconnect:
         await ws.disconnect(session.id, websocket)
+
+        # Best-effort presence update: mark participant as left.
+        now = datetime.now(timezone.utc)
+        try:
+            if participant.left_at is None:
+                participant.left_at = now
+            if participant.token_revoked_at is None:
+                participant.token_revoked_at = now
+            participant.is_ready = False
+            await db.commit()
+        except Exception:
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            return
+
+        try:
+            await ws.broadcast(
+                session_id=session.id,
+                event_type="participant_left",
+                data={
+                    "participant": {
+                        "id": str(participant.id),
+                        "display_name": participant.display_name,
+                        "left_at": now.isoformat(),
+                    }
+                },
+            )
+        except Exception:
+            # Avoid surfacing disconnect-path errors.
+            pass
